@@ -22,8 +22,9 @@ myfontsize = 15;
 
 % West German states shown in the state-level charts
 land_names = {
-    'Schleswig-Holstein', 'Bremen', 'Niedersachsen', 'Nordrhein-Westfalen', ...
-    'Hessen', 'Rheinland-Pfalz', 'Baden-Württemberg', 'Bayern'};
+    'Schleswig-Holstein', 'Hamburg', 'Bremen', 'Niedersachsen', ...
+    'Nordrhein-Westfalen', 'Hessen', 'Rheinland-Pfalz', 'Baden-Württemberg', ...
+    'Bayern'};
 
 %% READ BRIDGE DATA
 
@@ -98,6 +99,7 @@ opts.SelectedVariableNames = {
     'in the same State', 'in another state of the Federal Republic', ...
     'in Berlin', 'in another state of the Soviet Occupation Zone', ...
     'in the German eastern territories under foreign administration and in the Saar region', ...
+    'Silesia', 'Brandenburg', 'Pommerania', 'East Prussia', 'Saar region' ...
     ...
     'abroad', 'Austria', 'Czechoslovakia', 'Poland', 'Gdansk', 'Switzerland', ...
     'Soviet Union', 'former Baltic States', 'former Memel Territory', 'Hungary', ...
@@ -114,6 +116,7 @@ population_1939 = readtable(file, opts);
 population_1939.Properties.VariableNames = {
     'county_id', 'county_name', ...
     'same_state', 'another_state', 'berlin', 'gdr', 'east_admin_and_saar', ...
+    'silesia', 'brandenburg', 'pomerania', 'east_prussia', 'saar'...
     ...
     'abroad', 'austria', 'czechoslovakia', 'poland', 'gdansk', 'switzerland', ...
     'soviet_union', 'former_baltic_states', 'former_memel_territory', 'hungary', ...
@@ -158,47 +161,60 @@ war_destruction.damaged_percentage = ...
 
 war_destruction_ipums = get_ipums_table(war_destruction, bridge, shapes_ipums);
 
-%% Słupkowy dla stałej/imigranckiej populacji
+%% PREPARE DATA FOR CHARTS
 
-% Pobranie kolumn
-pop_rodzima = migracje_sumy.NativePopulation;
-pop_imigrancka = migracje_sumy.ImmigrantPopulation;
-landy = migracje_sumy.Land;
+% State-level rows (one per Land, in the order of land_names)
+state_expellees = get_state_rows(expellee_population, land_names);
+state_1939 = get_state_rows(population_1939, land_names);
 
-% Przygotowanie danych do wykresu
-[posortowana_imigrancka, indeksy] = sort(pop_imigrancka, "descend");
+% Add the 1950 total population to the 1939 residency table,
+% it is the denominator for all residency maps
+county_population = expellee_population(:, {'county_id', 'total_population'});
 
-posortowana_rodzima = pop_rodzima(indeksy);
-posortowane_nazwy = landy(indeksy);
+population_1939_ipums = innerjoin(population_1939_ipums, county_population, ...
+    'Keys', 'county_id');
 
-dane_do_wykresu = [posortowana_rodzima, posortowana_imigrancka];
+%% BAR CHART: EXPELLEES VS. NATIVE POPULATION PER STATE
 
-% Wykres
+% Native population = total population minus expellees
+expellees = state_expellees.total_expellees;
+native = state_expellees.total_population - expellees;
+states = state_expellees.county_name;
+
+% Sort states by the number of expellees
+[sorted_expellees, idx] = sort(expellees, "descend");
+
+sorted_native = native(idx);
+sorted_states = cellstr(states(idx));
+
+plot_data = [sorted_native, sorted_expellees];
+
+% Chart
 fig = figure();
 
-b = barh(posortowane_nazwy, dane_do_wykresu, 'grouped'); 
+b = barh(sorted_states, plot_data, 'grouped');
 
-xlabel('Liczba ludności');
-ylabel("Land")
+xlabel('Population');
+ylabel("State")
 
-legend({'Populacja rodzima', 'Populacja imigrancka'}, 'Location', 'northeast');
+legend({'Native population', 'Expellees'}, 'Location', 'northeast');
 
-title('Populacja imigrancka kontra populacja rodzima (1950 r.)');
+title('Expellees vs. native population (1950)');
 
 set(gca, 'XGrid', 'on');
 
 xlim([0, 13500000]);
 xticks(0:3000000:15000000)
 
-% Etykiety serii 1. (populacja stała)
-xtips = b(1).YEndPoints + 0.005 * max(xticks); % Drobne przesunięcie w prawo
+% Value labels for series 1 (native population)
+xtips = b(1).YEndPoints + 0.005 * max(xticks); % Small shift to the right
 ytips = b(1).XEndPoints;
 labels = string(b(1).YData);
 text(xtips, ytips, labels, 'HorizontalAlignment','left', ...
     'VerticalAlignment','middle','FontSize',8);
 
-% Etykiety serii 2. (populacja imigrancka)
-xtips = b(2).YEndPoints + 0.005 * max(xticks); % Drobne przesunięcie w prawo
+% Value labels for series 2 (expellees)
+xtips = b(2).YEndPoints + 0.005 * max(xticks); % Small shift to the right
 ytips = b(2).XEndPoints;
 labels = string(b(2).YData);
 text(xtips, ytips, labels, 'HorizontalAlignment','left', ...
@@ -207,265 +223,258 @@ text(xtips, ytips, labels, 'HorizontalAlignment','left', ...
 fontsize(fig, myfontsize, "points")
 
 
-%% Migracje wewnętrzne w Niemczech Zachodnich
+%% MAP: MIGRATION FROM OTHER WEST GERMAN STATES
 
-col = 'in another state of the Federal Republic';
+col = 'another_state';
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
+% Share of the 1950 population in %
+base = population_1939_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0, 5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
-cb.Ticks = [0, 1, 2, 3, 4, 5];
-
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
-
-% Tytuł i formatowanie
-t = title('Migracje wewnętrzne');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
-
-
-%% Migracje z Niemiec Wschodnich na landach zachodnich
-
-col = 'in another state of the Soviet Occupation Zone';
-
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
-
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
-
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
-
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
-
-% Inicjalizacja figury
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
-
-% Kolory
-colormap(gx, my_step_colormap);
-
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
-
-% Konfiguracja paska kolorów
-cb = colorbar;
-
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Migracje z Niemiec Wschodnich');
+% Title and formatting
+t = title('Migration from other West German states');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
-%% Migracje z Berlina na landach zachodnich
+%% MAP: MIGRATION FROM EAST GERMANY (SOVIET ZONE)
 
-col = 'in Berlin';
+col = 'gdr';
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
+% Share of the 1950 population in %
+base = population_1939_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Migracje z Berlina');
+% Title and formatting
+t = title('Migration from East Germany');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
+%% MAP: MIGRATION FROM BERLIN
 
-%% Migracje z ziem wschodnich na landach zachodnich
+col = 'berlin';
 
-col = 'in the German eastern territories under foreign administration and in the Saar region';
+% Share of the 1950 population in %
+base = population_1939_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
-
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-prawdziwe_krawedzie(end) = 49.755630473378680;
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Migracje z ziem wschodnich oraz okręgu Saary');
+% Title and formatting
+t = title('Migration from Berlin');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
+%% MAP: MIGRATION FROM THE EASTERN TERRITORIES AND THE SAAR REGION
 
-%% Wykres słupkowy emigracji z Niemiec Wschodnich, Berlina i ziem wschodnich
+col = 'east_admin_and_saar';
 
-% Kolumny z tabeli z danymi
-landy_okupacja = {'Silesia', 'Brandenburg', 'Pommerania', 'East Prussia'};
-% Polskie nazwy
-landy_okupacja_polskie = {'Śląsk', 'Brandenburgia', 'Pomorze', 'Prusy Wschodnie'};
+% Share of the 1950 population in %
+base = population_1939_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Sumy dla grup
-landy_okupajca_sumy = sum(migracje_base{:, landy_okupacja});
-berlin_suma = sum(migracje_base.Berlin);
-nrd_suma = sum(migracje_base.GDR_sum);
+sorted_1939 = sort(base{:, col}, 'descend');
+upper_lim = sorted_1939(2);
 
-% Sortowanie sum
-wyniki = [nrd_suma, berlin_suma, landy_okupajca_sumy];
-[posortowane_wyniki, indeksy] = sort(wyniki);
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Polskie etykiety i posortowanie ich zgodnie z indeksami sum
-etykiety_na_wykres = [{'Niemcy Wschodnie', 'Berlin'}, landy_okupacja_polskie];
-posortowane_etykiety = etykiety_na_wykres(indeksy);
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Wykres
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
+
+% Figure
+fig = figure();
+gx = geoaxes;
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
+
+% Colors
+colormap(gx, my_step_colormap);
+
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
+
+% Colorbar
+cb = colorbar;
+
+% 6 ticks placed exactly on the class boundaries
+cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
+
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
+
+% Title and formatting
+t = title('Migration from the eastern territories and the Saar region');
+t.Visible = 'on';
+fontsize(fig, myfontsize, "points");
+
+
+%% BAR CHART: MIGRATION FROM EAST GERMANY, BERLIN AND THE EASTERN TERRITORIES
+
+% Columns of the eastern territories and their chart labels
+east_cols = {'silesia', 'brandenburg', 'pomerania', 'east_prussia'};
+east_labels = {'Silesia', 'Brandenburg (east)', 'Pomerania', 'East Prussia'};
+
+% Totals over all states
+east_sums = sum(state_1939{:, east_cols}, 1, 'omitnan');
+berlin_sum = sum(state_1939.berlin, 'omitnan');
+gdr_sum = sum(state_1939.gdr, 'omitnan');
+
+% Sort the totals (ascending, so the largest bar is on top)
+totals = [gdr_sum, berlin_sum, east_sums];
+[sorted_totals, idx] = sort(totals);
+
+% Labels in the same order as the totals
+chart_labels = [{'East Germany', 'Berlin'}, east_labels];
+sorted_labels = chart_labels(idx);
+
+% Chart
 fig = figure();
 
-b = barh(posortowane_wyniki);
+b = barh(sorted_totals);
 
-yticks(1:length(posortowane_etykiety));
-yticklabels(posortowane_etykiety);
+yticks(1:length(sorted_labels));
+yticklabels(sorted_labels);
 
 set(gca, 'XGrid', 'on');
 
-xlabel('Liczba emigrantów');
-title('Emigracje z Niemiec Wschodnich, Berlina i ziem wschodnich');
+xlabel('Number of migrants');
+title('Migration from East Germany, Berlin and the eastern territories');
 
-wspolrzedne_X = b.YEndPoints + 0.005 * max(xticks); % Drobne przesunięcie w prawo
-wspolrzedne_Y = b.XEndPoints;
+% Value labels next to the bars
+label_x = b.YEndPoints + 0.005 * max(xticks); % Small shift to the right
+label_y = b.XEndPoints;
 
-etykiety = string(posortowane_wyniki);
+value_labels = string(sorted_totals);
 
-text(wspolrzedne_X, wspolrzedne_Y, etykiety, 'HorizontalAlignment', 'left', ...
+text(label_x, label_y, value_labels, 'HorizontalAlignment', 'left', ...
     'VerticalAlignment', 'middle', 'FontSize', 8);
 
 fontsize(fig, myfontsize, "points")
 
 
-%% Państwa z których pochodizli imigranci wspomniane z nazwy w zbiorze
+%% MAP: COUNTRIES OF ORIGIN NAMED IN THE CENSUS
 
-mapa_swiata_gis = readgeotable('cshapes/CShapes-2.0.shp');
-mapa_1937_gis = mapa_swiata_gis( ...
-    mapa_swiata_gis.gwsyear <= 1937 & mapa_swiata_gis.gweyear >= 1937, :);
+% World borders valid in 1937 (CShapes 2.0)
+world_gis = readgeotable('cshapes/CShapes-2.0.shp');
+world_1937_gis = world_gis( ...
+    world_gis.gwsyear <= 1937 & world_gis.gweyear >= 1937, :);
 
-% Wszystkie nazwy w zbiorze
-panstwa_pochodzenia = { ...
+% All countries named in the census table
+origin_countries = { ...
     'Austria', 'Czechoslovakia', 'Poland', 'Gdansk', ...
     'Switzerland', 'Soviet Union', 'Estonia', 'Latvia', ...
     'Lithuania', 'Hungary', 'Yugoslavia', 'Romania', ...
@@ -475,392 +484,381 @@ panstwa_pochodzenia = { ...
     'Argentina', 'South Africa', 'Australia', 'Germany' ...
 };
 
-% Niektóre nazwy w gisowksiej mapie się różnią
-stare_nazwy = {'Gdansk', 'Soviet Union', 'Romania', 'Italy', ...
+% Some names differ in CShapes
+census_names = {'Gdansk', 'Soviet Union', 'Romania', 'Italy', ...
     'Great Britain', 'USA'};
-nowe_nazwy = {'Danzig', 'Russia (Soviet Union)', 'Rumania', ...
+cshapes_names = {'Danzig', 'Russia (Soviet Union)', 'Rumania', ...
     'Italy/Sardinia', 'United Kingdom', 'United States of America'};
-panstwa_pochodzenia_zmapowane = replace(panstwa_pochodzenia, stare_nazwy, nowe_nazwy);
+origin_countries_mapped = replace(origin_countries, census_names, cshapes_names);
 
-% Wybranie państwa (ich rekordy) zainteresowania ze wszystkich
-indeksy_szukanych = ismember(mapa_1937_gis.cntry_name, panstwa_pochodzenia_zmapowane);
-% Wykorzystanie indeksów do znalezienia gisowskich kształtów
-kraje_zaznaczone_gis = mapa_1937_gis(indeksy_szukanych, :);
+% Select the shapes of the named countries
+is_origin = ismember(world_1937_gis.cntry_name, origin_countries_mapped);
+origin_gis = world_1937_gis(is_origin, :);
 
-% Wykres
+% Chart
 fig = figure();
 
-geoplot(mapa_1937_gis, 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', [0.8 0.8 0.8]);
+geoplot(world_1937_gis, 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', [0.8 0.8 0.8]);
 hold on;
 
-geoplot(kraje_zaznaczone_gis, 'FaceColor', '#D95319', 'EdgeColor', 'black');
+geoplot(origin_gis, 'FaceColor', '#D95319', 'EdgeColor', 'black');
 
-title('Wymienione państwa pochodzenia imigrantów na tle mapy świata z 1937 r.');
+title('Countries of origin named in the census (1937 borders)');
 
 fontsize(fig, myfontsize, "points")
 
 
-%% Imigracje z Europy
+%% BAR CHART: MIGRATION FROM EUROPEAN COUNTRIES
 
-% Wybranie kolumn europejskich i suma
-emigracje_eur = migracje_base(:, 29:47);
-emigracje_eur_suma = sum(emigracje_eur); 
-
-% Sortowanie
-[posortowane_liczby, indeksy] = sort(emigracje_eur_suma{:, :}, 'descend');
-
-etykiety_pl = { ...
-    'Austria', 'Czechosłowacja', 'Polska', 'Gdańsk', 'Szwajcaria', ...
-    'Związek Radziecki', 'Kraje Bałtyckie', 'Terytorium Kłajpedy', ...
-    'Węgry', 'Jugosławia', 'Rumunia', 'Włochy', 'Pozostałe kraje S i SE Europy', ...
-    'Francja', 'Belgia', 'Holandia', 'Luksemburg', 'Wielka Brytania', 'Dania'
+% European columns and their chart labels (same order)
+europe_cols = { ...
+    'austria', 'czechoslovakia', 'poland', 'gdansk', 'switzerland', ...
+    'soviet_union', 'former_baltic_states', 'former_memel_territory', ...
+    'hungary', 'yugoslavia', 'romania', 'italy', 'rest_of_south_and_southeast_europe', ...
+    'france', 'belgium', 'netherlands', 'luxembourg', 'great_britain', 'denmark'
 };
-posortowane_etykiety = etykiety_pl(indeksy);
+europe_labels = { ...
+    'Austria', 'Czechoslovakia', 'Poland', 'Gdańsk', 'Switzerland', ...
+    'Soviet Union', 'Baltic States', 'Memel Territory', ...
+    'Hungary', 'Yugoslavia', 'Romania', 'Italy', 'Other S and SE Europe', ...
+    'France', 'Belgium', 'Netherlands', 'Luxembourg', 'Great Britain', 'Denmark'
+};
 
-% Wykres
+% Totals over all states
+europe_sums = sum(state_1939{:, europe_cols}, 1, 'omitnan');
+
+% Sort (descending, reversed y-axis puts the largest bar on top)
+[sorted_sums, idx] = sort(europe_sums, 'descend');
+sorted_labels = europe_labels(idx);
+
+% Chart
 fig = figure();
 
-b = barh(posortowane_liczby);
+b = barh(sorted_sums);
 
-yticks(1:length(posortowane_etykiety));
-yticklabels(posortowane_etykiety);
+yticks(1:length(sorted_labels));
+yticklabels(sorted_labels);
 
 set(gca, 'YDir', 'reverse');
 set(gca, 'XGrid', 'on');
 
-xlabel('Liczba emigrantów');
-title('Emigracje z państw Europy');
+xlabel('Number of migrants');
+title('Migration from European countries');
 
-wspolrzedne_X = b.YEndPoints + 0.005 * max(xticks); % Drobne przesunięcie w prawo
-wspolrzedne_Y = b.XEndPoints;
+% Value labels next to the bars
+label_x = b.YEndPoints + 0.005 * max(xticks); % Small shift to the right
+label_y = b.XEndPoints;
 
-etykiety = string(posortowane_liczby);
+value_labels = string(sorted_sums);
 
-text(wspolrzedne_X, wspolrzedne_Y, etykiety, 'HorizontalAlignment', 'left', ...
+text(label_x, label_y, value_labels, 'HorizontalAlignment', 'left', ...
     'VerticalAlignment', 'middle', 'FontSize', 8);
 
 fontsize(fig, myfontsize, "points")
 
 
-%% Migracje z Czechosłowacji
+%% MAP: MIGRATION FROM CZECHOSLOVAKIA
 
-col = 'Czechoslovakia';
+col = 'czechoslovakia';
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
+% Share of the 1950 population in %
+base = population_1939_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-prawdziwe_krawedzie(end) = 49.755630473378680;
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Migracje z Czechosłowacji');
+% Title and formatting
+t = title('Migration from Czechoslovakia');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
-%% Migracje z Polski
+%% MAP: MIGRATION FROM POLAND
 
-col = 'Poland';
+col = 'poland';
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
+% Share of the 1950 population in %
+base = population_1939_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-prawdziwe_krawedzie(end) = 49.755630473378680;
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Migracje z Polski');
+% Title and formatting
+t = title('Migration from Poland');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
+%% BAR CHART: MIGRATION FROM NON-EUROPEAN COUNTRIES
 
-%% Emigracja ze świata
-
-% Wybranie państw świata i suma
-emigracje_swiat = migracje_base(:, 51:61);
-emigracje_swiat_suma = sum(emigracje_swiat);
-
-% Sortowanie
-[posortowane_liczby, indeksy] = sort(emigracje_swiat_suma{:, :});
-
-etykiety_pl = { ...
-    'Chiny i Japonia', 'Pozostałe kraje Azji', 'USA', 'Kanada', 'Brazylia', ...
-    'Argentyna', 'Pozostałe kraje Ameryki', 'Związek Południowej Afryki', ...
-    'Pozostałe kraje Afryki', 'Australia', 'Oceania' ...
+% Non-European columns and their chart labels (same order)
+world_cols = { ...
+    'china_and_japan', 'rest_of_asia', 'usa', 'canada', 'brazil', ...
+    'argentina', 'rest_of_america', 'south_african_union', ...
+    'rest_of_africa', 'australia', 'oceania' ...
 };
-posortowane_etykiety = etykiety_pl(indeksy);
+world_labels = { ...
+    'China and Japan', 'Other Asia', 'USA', 'Canada', 'Brazil', ...
+    'Argentina', 'Other America', 'South African Union', ...
+    'Other Africa', 'Australia', 'Oceania' ...
+};
 
-% Wykres
+% Totals over all states
+world_sums = sum(state_1939{:, world_cols}, 1, 'omitnan');
+
+% Sort (ascending, so the largest bar is on top)
+[sorted_sums, idx] = sort(world_sums);
+sorted_labels = world_labels(idx);
+
+% Chart
 fig = figure();
 
-b = barh(posortowane_liczby);
+b = barh(sorted_sums);
 
-yticks(1:length(posortowane_etykiety));
-yticklabels(posortowane_etykiety);
+yticks(1:length(sorted_labels));
+yticklabels(sorted_labels);
 
 set(gca, 'XGrid', 'on');
 
-xlabel('Liczba emigrantów');
-title('Emigracje z państw świata');
+xlabel('Number of migrants');
+title('Migration from non-European countries');
 
-wspolrzedne_X = b.YEndPoints + 0.005 * max(xticks); % Drobne przesunięcie w prawo
-wspolrzedne_Y = b.XEndPoints;
+% Value labels next to the bars
+label_x = b.YEndPoints + 0.005 * max(xticks); % Small shift to the right
+label_y = b.XEndPoints;
 
-etykiety = string(posortowane_liczby);
+value_labels = string(sorted_sums);
 
-text(wspolrzedne_X, wspolrzedne_Y, etykiety, 'HorizontalAlignment', 'left', ...
+text(label_x, label_y, value_labels, 'HorizontalAlignment', 'left', ...
     'VerticalAlignment', 'middle', 'FontSize', 8);
 
 fontsize(fig, myfontsize, "points")
 
 
-%% Migracje zza granicy
+%% MAP: MIGRATION FROM ABROAD
 
 col = 'abroad';
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
+% Share of the 1950 population in %
+base = population_1939_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-prawdziwe_krawedzie(end) = 49.755630473378680;
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Migracje zza granicy');
+% Title and formatting
+t = title('Migration from abroad');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
-%% Całkowite imigracje w Nieczech Zachodnich
+%% MAP: ALL EXPELLEES IN WEST GERMANY
 
-col = 'Total number of expellees 13/09/1950';
+col = 'total_expellees';
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
-    base{:, col} = base{:, col} ./ ...
-    migracje_ipums_final{:, 'Total population 13/9/1950'} .* 100;
+% Share of the 1950 population in %
+base = expellee_population_ipums(:, {'Shape', col});
+base{:, col} = base{:, col} ./ expellee_population_ipums.total_population .* 100;
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Całkowite migracje do Niemiec Zachodnich');
+% Title and formatting
+t = title('Expellees in West Germany');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
+%% MAP: SHARE OF DWELLINGS DAMAGED IN THE WAR
 
-%% Zniszczenia procentowe w Niemczech Zachodnich
+col = 'damaged_percentage';
 
-col = 'Share of normal dwellings affected by war damages';
+% Already a share in %, no division needed
+base = war_destruction_ipums(:, {'Shape', col});
 
-% Przygotowanie danych bazowych i obliczenie wskaźnika
-base = migracje_ipums_final(:, {'Shape', col});
+% Class edges
+values = base{:, col};
+edges = quantile(values, linspace(0, 1, 6));
 
-% Obliczenie schodków
-dane = base{:, col};
-prawdziwe_krawedzie = quantile(dane, linspace(0, 1, 6)); 
+% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
+bin_edges = edges;
+bin_edges(1) = -Inf;
+bin_edges(end) = Inf;
 
-% Stworzenie osobnej zmiennej do kategoryzacji (żeby nie zepsuć etykiet napisem -Inf / Inf)
-krawedzie_obliczeniowe = prawdziwe_krawedzie;
-krawedzie_obliczeniowe(1) = -Inf; 
-krawedzie_obliczeniowe(end) = Inf;
+% Assign each county to a class 1-5
+base.color_class = discretize(values, bin_edges);
 
-% Kategoryzacja danych
-base.Kategoria_Koloru = discretize(dane, krawedzie_obliczeniowe);
-
-% Inicjalizacja figury
+% Figure
 fig = figure();
 gx = geoaxes;
-geoplot(base, 'ColorVariable', 'Kategoria_Koloru');
-geobasemap(gx, 'none'); 
-gx.Grid = 'off'; 
-gx.Visible = 'off'; 
+geoplot(base, 'ColorVariable', 'color_class');
+geobasemap(gx, 'none');
+gx.Grid = 'off';
+gx.Visible = 'off';
 
-% Kolory
+% Colors
 colormap(gx, my_step_colormap);
 
-% Ustawienie granic na x.5, żeby przesunąć krawędzie
-clim(gx, [0.5, 5.5]); 
+% Color limits at x.5, so that classes 1-5 fall in the middle of each color
+clim(gx, [0.5, 5.5]);
 
-% Konfiguracja paska kolorów
+% Colorbar
 cb = colorbar;
 
-% Wymuszenie 6 znaczników dokładnie na granicach kolorów
+% 6 ticks placed exactly on the class boundaries
 cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
 
-% Przekazanie WSZYSTKICH 6 prawdziwych krawędzi (od min do max)
-% Używamy oryginalnych kwantyli, a nie tych z -Inf
-cb.TickLabels = string(round(prawdziwe_krawedzie, 2)); 
+% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
+cb.TickLabels = string(round(edges, 2));
 
-% Tytuł i formatowanie
-t = title('Zniszczenia procentowe domów w Niemczech Zachodnich');
+% Title and formatting
+t = title('Dwellings damaged in the war in West Germany');
 t.Visible = 'on';
 fontsize(fig, myfontsize, "points");
 
 
-%% Zapis
+%% SAVE FIGURES
+
 if SAVE
-    FolderName = ('chart_dump');  
+    FolderName = ('chart_dump');
     FigList = findobj(allchild(0), 'flat', 'Type', 'figure');
     for iFig = 1:length(FigList)
-      % Pobranie uchwytu do wykresu i wzięcie jego osi
+      % Get the figure handle and its axes
       FigHandle = FigList(iFig);
       allAxes = findobj(FigHandle, 'Type', 'axes', '-or', 'Type', 'geoaxes');
 
-      % Ukrycie tytułów na czas zapisu
-      for iAx = 1:length(allAxes)
-          allAxes(iAx).Title.Visible = 'on';
-      end
-
-      % Zapis
+      % Save as <figure number>.png
       FigName = num2str(get(FigHandle, 'Number'));
       saveas(FigHandle, fullfile(FolderName,strcat(FigName,'.png')));
-
-      % Ponowne pokazanie po zapisie
-      for iAx = 1:length(allAxes)
-          allAxes(iAx).Title.Visible = 'on';
-      end
     end
 end
