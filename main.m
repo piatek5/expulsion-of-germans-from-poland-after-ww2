@@ -4,11 +4,6 @@
 % Save all figures after they have been displayed
 SAVE = true;
 
-% Colors
-g = gray(256);
-mygray = g(1:240, :); % Grayscale without the near-white end
-
-% 5-step grayscale for the quintile choropleth maps (light -> dark)
 my_step_colormap = [
     247, 247, 247;
     204, 204, 204;
@@ -99,15 +94,18 @@ opts.SelectedVariableNames = {
     'in the same State', 'in another state of the Federal Republic', ...
     'in Berlin', 'in another state of the Soviet Occupation Zone', ...
     'in the German eastern territories under foreign administration and in the Saar region', ...
-    'Silesia', 'Brandenburg', 'Pommerania', 'East Prussia', 'Saar region' ...
+    'Silesia', 'Brandenburg', 'Pommerania', 'East Prussia', 'Saar region', ...
     ...
     'abroad', 'Austria', 'Czechoslovakia', 'Poland', 'Gdansk', 'Switzerland', ...
     'Soviet Union', 'former Baltic States', 'former Memel Territory', 'Hungary', ...
-    'Yugoslavia', 'Romania', 'Italy', 'France', 'Belgium', 'Netherlands', ...
+    'Yugoslavia', 'Romania', 'Italy', 'rest of south and south east Europe', ...
+    'France', 'Belgium', 'Netherlands', ...
     'Luxembourg', 'Great Britain', 'Denmark', ...
     ...
-    'non European States', 'Chian and Japan', 'USA', 'Canada', 'Brazil', ...
-    'Argentinia', 'South African Union', 'Australia', 'Oceania'
+    'non European States', 'Chian and Japan', 'rest of Asia', ...
+    'USA', 'Canada', 'Brazil', ...
+    'Argentinia', 'rest of America', 'South African Union', 'rest of Africa', ...
+    'Australia', 'Oceania'
 };
 
 population_1939 = readtable(file, opts);
@@ -116,15 +114,18 @@ population_1939 = readtable(file, opts);
 population_1939.Properties.VariableNames = {
     'county_id', 'county_name', ...
     'same_state', 'another_state', 'berlin', 'gdr', 'east_admin_and_saar', ...
-    'silesia', 'brandenburg', 'pomerania', 'east_prussia', 'saar'...
+    'silesia', 'brandenburg', 'pomerania', 'east_prussia', 'saar', ...
     ...
     'abroad', 'austria', 'czechoslovakia', 'poland', 'gdansk', 'switzerland', ...
     'soviet_union', 'former_baltic_states', 'former_memel_territory', 'hungary', ...
-    'yugoslavia', 'romania', 'italy', 'france', 'belgium', 'netherlands', ...
+    'yugoslavia', 'romania', 'italy', 'rest_of_south_and_southeast_europe', ...
+    'france', 'belgium', 'netherlands', ...
     'luxembourg', 'great_britain', 'denmark', ...
     ...
-    'non_european_states', 'china_and_japan', 'usa', 'canada', 'brazil', ...
-    'argentina', 'south_african_union', 'australia', 'oceania'
+    'non_european_states', 'china_and_japan', 'rest_of_asia', ...
+    'usa', 'canada', 'brazil', ...
+    'argentina', 'rest_of_america', 'south_african_union', 'rest_of_africa', ...
+    'australia', 'oceania'
 };
 
 population_1939 = add_lindau(population_1939);
@@ -239,45 +240,9 @@ col = 'another_state';
 base = population_1939_ipums(:, {'Shape', col});
 base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Migration from other West German states');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Migration from other West German states', ...
+    my_step_colormap, myfontsize);
 
 
 %% MAP: MIGRATION FROM EAST GERMANY (SOVIET ZONE)
@@ -288,45 +253,9 @@ col = 'gdr';
 base = population_1939_ipums(:, {'Shape', col});
 base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Migration from East Germany');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Migration from East Germany', ...
+    my_step_colormap, myfontsize);
 
 
 %% MAP: MIGRATION FROM BERLIN
@@ -337,45 +266,9 @@ col = 'berlin';
 base = population_1939_ipums(:, {'Shape', col});
 base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Migration from Berlin');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Migration from Berlin', ...
+    my_step_colormap, myfontsize);
 
 
 %% MAP: MIGRATION FROM THE EASTERN TERRITORIES AND THE SAAR REGION
@@ -389,45 +282,9 @@ base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 sorted_1939 = sort(base{:, col}, 'descend');
 upper_lim = sorted_1939(2);
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Migration from the eastern territories and the Saar region');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Migration from the eastern territories and the Saar region', ...
+    my_step_colormap, myfontsize, UpperLabel=upper_lim);
 
 
 %% BAR CHART: MIGRATION FROM EAST GERMANY, BERLIN AND THE EASTERN TERRITORIES
@@ -573,45 +430,9 @@ col = 'czechoslovakia';
 base = population_1939_ipums(:, {'Shape', col});
 base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Migration from Czechoslovakia');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Migration from Czechoslovakia', ...
+    my_step_colormap, myfontsize);
 
 
 %% MAP: MIGRATION FROM POLAND
@@ -622,45 +443,9 @@ col = 'poland';
 base = population_1939_ipums(:, {'Shape', col});
 base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Migration from Poland');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Migration from Poland', ...
+    my_step_colormap, myfontsize);
 
 
 %% BAR CHART: MIGRATION FROM NON-EUROPEAN COUNTRIES
@@ -717,45 +502,9 @@ col = 'abroad';
 base = population_1939_ipums(:, {'Shape', col});
 base{:, col} = base{:, col} ./ population_1939_ipums.total_population .* 100;
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Migration from abroad');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Migration from abroad', ...
+    my_step_colormap, myfontsize);
 
 
 %% MAP: ALL EXPELLEES IN WEST GERMANY
@@ -766,45 +515,9 @@ col = 'total_expellees';
 base = expellee_population_ipums(:, {'Shape', col});
 base{:, col} = base{:, col} ./ expellee_population_ipums.total_population .* 100;
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Expellees in West Germany');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Expellees in West Germany', ...
+    my_step_colormap, myfontsize);
 
 
 %% MAP: SHARE OF DWELLINGS DAMAGED IN THE WAR
@@ -814,45 +527,9 @@ col = 'damaged_percentage';
 % Already a share in %, no division needed
 base = war_destruction_ipums(:, {'Shape', col});
 
-% Class edges
-values = base{:, col};
-edges = quantile(values, linspace(0, 1, 6));
-
-% Separate edges for binning, open at both ends (keeps -Inf/Inf out of the labels)
-bin_edges = edges;
-bin_edges(1) = -Inf;
-bin_edges(end) = Inf;
-
-% Assign each county to a class 1-5
-base.color_class = discretize(values, bin_edges);
-
-% Figure
-fig = figure();
-gx = geoaxes;
-geoplot(base, 'ColorVariable', 'color_class');
-geobasemap(gx, 'none');
-gx.Grid = 'off';
-gx.Visible = 'off';
-
-% Colors
-colormap(gx, my_step_colormap);
-
-% Color limits at x.5, so that classes 1-5 fall in the middle of each color
-clim(gx, [0.5, 5.5]);
-
-% Colorbar
-cb = colorbar;
-
-% 6 ticks placed exactly on the class boundaries
-cb.Ticks = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-
-% Label the ticks with all 6 real edges (min to max), not the -Inf/Inf ones
-cb.TickLabels = string(round(edges, 2));
-
-% Title and formatting
-t = title('Dwellings damaged in the war in West Germany');
-t.Visible = 'on';
-fontsize(fig, myfontsize, "points");
+plot_quintile_map(base, col, ...
+    'Dwellings damaged in the war in West Germany', ...
+    my_step_colormap, myfontsize);
 
 
 %% SAVE FIGURES
