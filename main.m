@@ -1,14 +1,14 @@
 
-%% 
+%% GLOBAL SETTINGS
 
-SAVE = true; % Czy zapisać wykresy po wyświetleniu wszystkich
+% Save all figures after they have been displayed
+SAVE = true;
 
-%% ZMIENNE GLOBALNE
+% Colors
+g = gray(256);
+mygray = g(1:240, :); % Grayscale without the near-white end
 
-% Kolory
-g = gray(256); 
-mygray = g(1:240, :);
-
+% 5-step grayscale for the quintile choropleth maps (light -> dark)
 my_step_colormap = [
     247, 247, 247;
     204, 204, 204;
@@ -17,15 +17,18 @@ my_step_colormap = [
      37,  37,  37
 ] / 255;
 
-% Rozmiar czcionki
+% Font size used in all figures
 myfontsize = 15;
 
+% West German states shown in the state-level charts
 land_names = {
     'Schleswig-Holstein', 'Bremen', 'Niedersachsen', 'Nordrhein-Westfalen', ...
-    'Hessen', 'Rheinland-Pfalz', 'Baden-Württemberg', 'Bayern'}; 
+    'Hessen', 'Rheinland-Pfalz', 'Baden-Württemberg', 'Bayern'};
 
 %% READ BRIDGE DATA
 
+% bridge.csv maps census county IDs to IPUMS county IDs (KREIS_KENN).
+% IDs are read as strings to keep leading zeros and spaces intact.
 file = 'bridge.csv';
 
 opts = detectImportOptions(file, 'TextType', 'string');
@@ -36,11 +39,13 @@ opts.SelectedVariableNames = {'census_id', 'ipums_id'};
 
 bridge = readtable(file, opts);
 
-% Pobranie kształtów z IPUMS
+% County shapes from IPUMS (state of 1950)
 shapes_ipums = readgeotable('germany_ipums/niemcy_1949_1989/Germany_1950_v.1.0.shp');
 
-%% READ EXPELEE POPULATION
+%% READ EXPELLEE POPULATION
 
+% Table 6: total population and number of expellees per county (13.09.1950).
+% Data starts at column D (County ID).
 file = 'sources/tab6vz1950population-expellees.xlsx';
 
 opts = detectImportOptions(file, 'Sheet', 2, ...
@@ -59,6 +64,9 @@ expellee_population_ipums = get_ipums_table(expellee_population, bridge, shapes_
 
 %% READ 1939 RESIDENCY
 
+% Table 7: 1950 population by place of residence on 1 September 1939.
+% The header spans two rows: row 2 holds main categories, row 3 holds
+% sub-categories.
 file = 'sources/tab7vz1950population-by-place-of-residence-on-september-1-1939-org.xlsx';
 
 raw_headers = readcell(file, 'Sheet', 2, 'Range', '2:3');
@@ -67,6 +75,7 @@ h0 = {'county_id', 'county_name'};
 h1 = string(raw_headers(1, :));
 h2 = string(raw_headers(2, :));
 
+% Use the sub-category name if present, otherwise the main category name
 for i = (1:length(h2))
     if ismissing(h2(i))
         h2(i) = h1(i);
@@ -83,6 +92,7 @@ opts = detectImportOptions(file, 'Sheet', 2, ...
 
 opts.VariableNames = h2;
 
+% Selected columns
 opts.SelectedVariableNames = {
     'county_id', 'county_name', ...
     'in the same State', 'in another state of the Federal Republic', ...
@@ -100,6 +110,7 @@ opts.SelectedVariableNames = {
 
 population_1939 = readtable(file, opts);
 
+% Replacement names
 population_1939.Properties.VariableNames = {
     'county_id', 'county_name', ...
     'same_state', 'another_state', 'berlin', 'gdr', 'east_admin_and_saar', ...
@@ -119,6 +130,9 @@ population_1939_ipums = get_ipums_table(population_1939, bridge, shapes_ipums);
 
 %% READ WAR DESTRUCTION
 
+% Table 16: normal dwellings in total and those affected by war damages (1950).
+% Absolute counts are read (not the source's share column), so that Lindau
+% can be added to Bayern before the share is computed.
 file = 'sources/tab16gz1950war-destructions.xlsx';
 
 opts = detectImportOptions(file, 'Sheet', 2, ...
@@ -138,6 +152,7 @@ war_destruction.Properties.VariableNames = { ...
 
 war_destruction = add_lindau(war_destruction);
 
+% Share of damaged dwellings in %
 war_destruction.damaged_percentage = ...
     war_destruction.damaged_dwellings ./ war_destruction.total_dwellings .* 100;
 
