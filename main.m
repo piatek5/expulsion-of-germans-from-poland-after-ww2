@@ -129,6 +129,14 @@ population_1939.Properties.VariableNames = {
 
 population_1939 = add_lindau(population_1939);
 
+misc_n_rhein = {'Landesteil Nordrhein', 'Landesteil Westfalen'};
+mask_n_rhein = population_1939.county_id.startsWith('14') | ...
+    matches(population_1939.county_name, misc_n_rhein);
+cols = {'silesia', 'brandenburg', 'pomerania', 'east_prussia', 'saar'};
+n_rhein_east = population_1939(mask_n_rhein, cols);
+n_rhein_east_sum = sum(n_rhein_east, 2);
+population_1939(mask_n_rhein, 'east_admin_and_saar') = n_rhein_east_sum;
+
 population_1939_ipums = get_ipums_table(population_1939, bridge, shapes_ipums);
 
 %% READ WAR DESTRUCTION
