@@ -1,102 +1,14 @@
-% Zajęcia projektowe z Wizualizacji Danych
-% Grupa 3, wtorek 17:15 - 20:00
-% Borys Piątek 331725
+
+%% 
 
 SAVE = true; % Czy zapisać wykresy po wyświetleniu wszystkich
-
-
-%% WCZYTANIE DANYCH DLA LANDÓW
-
-migracje_base = readtable('migracje-1950.csv', 'VariableNamingRule', 'preserve');
-migracje_base.Properties.RowNames = migracje_base{:,2};
-
-migracje_sumy = readtable('suma-migracje-1950.csv');
-
-zniszczenia = readtable('suma-zniszczen-domow-1950.csv');
-zniszczenia.PercentageDestroyed = str2double(...
-    replace(string(zniszczenia.PercentageDestroyed), ',', '.'));
-
-%% WCZYTANIE DANYCH DLA GMIN
-
-plik = 'źródła\tab7vz1950population-by-place-of-residence-on-september-1-1939.xlsx';
-
-wybrane_kolumny = {'County ID', 'County Name', 'in the same State', ...
-'in another state of the Federal Republic', 'in Berlin', ...
-'in another state of the Soviet Occupation Zone', ...
-'in the German eastern territories under foreign administration and in the Saar region', ...
-'Silesia', 'Brandenburg', 'Pommerania', 'East Prussia', 'Saar region', ...
-'abroad', 'Austria', 'Czechoslovakia', 'Poland', 'Gdansk'};
-
-% Podanie paraewmtrów w detectImportOptions przed wybraniem kolumn
-opts = detectImportOptions(plik, 'Sheet', 2, ...
-    'VariableNamesRange', 'A3', ...
-    'DataRange', 'A7', ...
-    'VariableNamingRule', 'preserve');
-
-% Wybranie kolumn
-opts.SelectedVariableNames = wybrane_kolumny;
-
-% Pobranie pliku zgodnie z opcjami
-migracje_tab7_residence_1939 = readtable(plik, opts);
-
-% Pobranie kształtów z IPUMS
-niemcy_ipums = readgeotable('germany_ipums\niemcy_1949_1989\Germany_1950_v.1.0.shp');
-
-% Pobranie tabelki z ID dla spisu i dla IPUMS
-T_srodek = readtable('bridge.xlsx');
-T_srodek = T_srodek(:, {'spis_ID', 'ipums_ID'});
-
-% Łączenie spisu z mostem
-T_temp = innerjoin(migracje_tab7_residence_1939, T_srodek, 'LeftKeys', 'County ID', 'RightKeys', 'spis_ID');
-
-% Łączenie poprzedniego wyniku z IPUMS
-migracje_ipums_final = innerjoin(T_temp, niemcy_ipums, 'LeftKeys', 'ipums_ID', 'RightKeys', 'KREIS_KENN');
-
-% Przesunięcie "Shape" na początek (dla readgeotable)
-migracje_ipums_final = movevars(migracje_ipums_final, 'Shape', 'Before', 1);
-
-% Dodanie całej populacji migracyjnej
-wybrane_kolumny = {'County ID', 'Total population 13/9/1950', ...
-    'Total number of expellees 13/09/1950'};
-
-plik = 'źródła\tab6vz1950population-expellees.xlsx';
-
-opts = detectImportOptions(plik, 'Sheet', 2, ...
-    'VariableNamesRange', 'A2', ...
-    'DataRange', 'A4', ...
-    'VariableNamingRule', 'preserve');
-
-opts.SelectedVariableNames = wybrane_kolumny;
-
-migracje_tab6_pop_expellees_1950 = readtable(plik, opts);
-
-migracje_ipums_final = innerjoin(migracje_ipums_final, migracje_tab6_pop_expellees_1950, ...
-    'LeftKeys', 'County ID', 'RightKeys', 'County ID');
-
-% Dodanie znisczeń domów
-wybrane_kolumny = {'County ID', ...
-    'Share of normal dwellings affected by war damages'};
-
-plik = 'źródła\tab16gz1950war-destructions.xlsx';
-
-opts = detectImportOptions(plik, 'Sheet', 2, ...
-    'VariableNamesRange', 'A2', ...
-    'DataRange', 'A4', ...
-    'VariableNamingRule', 'preserve');
-
-opts.SelectedVariableNames = wybrane_kolumny;
-
-migracje_tab16_war_destruction_1950 = readtable(plik, opts);
-
-migracje_ipums_final = innerjoin(migracje_ipums_final, migracje_tab16_war_destruction_1950, ...
-    'LeftKeys', 'County ID', 'RightKeys', 'County ID');
-
 
 %% ZMIENNE GLOBALNE
 
 % Kolory
 g = gray(256); 
 mygray = g(1:240, :);
+
 my_step_colormap = [
     247, 247, 247;
     204, 204, 204;
@@ -108,6 +20,128 @@ my_step_colormap = [
 % Rozmiar czcionki
 myfontsize = 15;
 
+land_names = {
+    'Schleswig-Holstein', 'Bremen', 'Niedersachsen', 'Nordrhein-Westfalen', ...
+    'Hessen', 'Rheinland-Pfalz', 'Baden-Württemberg', 'Bayern'}; 
+
+%% READ BRIDGE DATA
+
+file = 'bridge.csv';
+
+opts = detectImportOptions(file, 'TextType', 'string');
+
+opts = setvartype(opts, {'census_id', 'ipums_id'}, 'string');
+
+opts.SelectedVariableNames = {'census_id', 'ipums_id'};
+
+bridge = readtable(file, opts);
+
+% Pobranie kształtów z IPUMS
+shapes_ipums = readgeotable('germany_ipums/niemcy_1949_1989/Germany_1950_v.1.0.shp');
+
+%% READ EXPELEE POPULATION
+
+file = 'sources/tab6vz1950population-expellees.xlsx';
+
+opts = detectImportOptions(file, 'Sheet', 2, ...
+    'VariableNamesRange', '', ...
+    'DataRange', 'D4', ...
+    'VariableNamingRule', 'preserve', ...
+    'TextType', 'string');
+
+opts.VariableNames = {'county_id', 'county_name', 'total_population', 'total_expellees'};
+
+expellee_population = readtable(file, opts);
+
+expellee_population = add_lindau(expellee_population);
+
+expellee_population_ipums = get_ipums_table(expellee_population, bridge, shapes_ipums);
+
+%% READ 1939 RESIDENCY
+
+file = 'sources/tab7vz1950population-by-place-of-residence-on-september-1-1939-org.xlsx';
+
+raw_headers = readcell(file, 'Sheet', 2, 'Range', '2:3');
+
+h0 = {'county_id', 'county_name'};
+h1 = string(raw_headers(1, :));
+h2 = string(raw_headers(2, :));
+
+for i = (1:length(h2))
+    if ismissing(h2(i))
+        h2(i) = h1(i);
+    end
+end
+
+h2 = [h0, h2];
+
+opts = detectImportOptions(file, 'Sheet', 2, ...
+    'VariableNamesRange', '', ...
+    'DataRange', 'D7', ...
+    'VariableNamingRule', 'preserve', ...
+    'TextType', 'string');
+
+opts.VariableNames = h2;
+
+opts.SelectedVariableNames = {
+    'county_id', 'county_name', ...
+    'in the same State', 'in another state of the Federal Republic', ...
+    'in Berlin', 'in another state of the Soviet Occupation Zone', ...
+    'in the German eastern territories under foreign administration and in the Saar region', ...
+    ...
+    'abroad', 'Austria', 'Czechoslovakia', 'Poland', 'Gdansk', 'Switzerland', ...
+    'Soviet Union', 'former Baltic States', 'former Memel Territory', 'Hungary', ...
+    'Yugoslavia', 'Romania', 'Italy', 'France', 'Belgium', 'Netherlands', ...
+    'Luxembourg', 'Great Britain', 'Denmark', ...
+    ...
+    'non European States', 'Chian and Japan', 'USA', 'Canada', 'Brazil', ...
+    'Argentinia', 'South African Union', 'Australia', 'Oceania'
+};
+
+population_1939 = readtable(file, opts);
+
+population_1939.Properties.VariableNames = {
+    'county_id', 'county_name', ...
+    'same_state', 'another_state', 'berlin', 'gdr', 'east_admin_and_saar', ...
+    ...
+    'abroad', 'austria', 'czechoslovakia', 'poland', 'gdansk', 'switzerland', ...
+    'soviet_union', 'former_baltic_states', 'former_memel_territory', 'hungary', ...
+    'yugoslavia', 'romania', 'italy', 'france', 'belgium', 'netherlands', ...
+    'luxembourg', 'great_britain', 'denmark', ...
+    ...
+    'non_european_states', 'china_and_japan', 'usa', 'canada', 'brazil', ...
+    'argentina', 'south_african_union', 'australia', 'oceania'
+};
+
+population_1939 = add_lindau(population_1939);
+
+population_1939_ipums = get_ipums_table(population_1939, bridge, shapes_ipums);
+
+%% READ WAR DESTRUCTION
+
+file = 'sources/tab16gz1950war-destructions.xlsx';
+
+opts = detectImportOptions(file, 'Sheet', 2, ...
+    'VariableNamesRange', 'A2', ...
+    'DataRange', 'A4', ...
+    'VariableNamingRule', 'preserve', ...
+    'TextType', 'string');
+
+opts.SelectedVariableNames = { ...
+    'County ID', 'County Name', 'Normal dwellings (total)', ...
+    'Normal dwellings affected by war damages'};
+
+war_destruction = readtable(file, opts);
+
+war_destruction.Properties.VariableNames = { ...
+    'county_id', 'county_name', 'total_dwellings', 'damaged_dwellings'};
+
+war_destruction = add_lindau(war_destruction);
+
+war_destruction.damaged_percentage = ...
+    war_destruction.damaged_dwellings ./ war_destruction.total_dwellings .* 100;
+
+war_destruction_ipums = get_ipums_table(war_destruction, bridge, shapes_ipums);
 
 %% Słupkowy dla stałej/imigranckiej populacji
 
